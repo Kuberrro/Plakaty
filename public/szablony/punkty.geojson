@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [19.9366, 50.0614] },
+      "properties": { "nazwa": "Przykładowa tablica (usuń ten obiekt)", "typ": "tablica", "miejscowosc": "Przykładowo", "rejon": "Północ", "notatka": "Współrzędne: najpierw długość, potem szerokość" }
+    }
+  ]
+}

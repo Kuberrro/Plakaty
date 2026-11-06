@@ -1,0 +1,3 @@
+nazwa;typ;miejscowosc;adres;rejon;lat;lng;tablica_lat;tablica_lng;notatka;id_zrodlowe
+Przykładowa tablica (usuń ten wiersz);tablica;Przykładowo;;Północ;50.0614;19.9366;;;Przykładowa notatka;T-001
+Przykładowe miejsce (usuń ten wiersz);inne;Przykładowo;ul. Przykładowa 1;Północ;50.0700;19.9400;50.0702;19.9402;;

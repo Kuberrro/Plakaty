@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dev-dist/
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+test-results/
+playwright-report/
+# Eksporty i kopie danych nie mogą trafić do repozytorium
+plakaty-kopia-*.json
+plakaty-raport-*.csv
+plakaty-punkty-*.geojson
+*.backup.json
+dist-e2e/
+.claude/
