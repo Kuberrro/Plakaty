@@ -12,7 +12,7 @@ import { PointForm } from './PointForm';
 /** Widok mapy żyje między przełączeniami zakładek, ale nie jest zapisywany na stałe. */
 let lastView: { center: [number, number]; zoom: number } | null = null;
 
-export function MapView({ filters, setFilters }: { filters: Filters; setFilters: (f: Filters) => void }) {
+export function MapView({ filters, setFilters, onQuickAdd }: { filters: Filters; setFilters: (f: Filters) => void; onQuickAdd: () => void }) {
   const { openPoint, location } = useApp();
   const { points, statuses } = useSnapshot();
   const [map, setMap] = useState<L.Map | null>(null);
@@ -22,7 +22,7 @@ export function MapView({ filters, setFilters }: { filters: Filters; setFilters:
   const [showFilters, setShowFilters] = useState(false);
   const [adding, setAdding] = useState<'pick' | { lat: number; lng: number } | null>(null);
 
-  const shown = useMemo(() => applyFilters(points, statuses, filters), [points, statuses, filters]);
+  const shown = useMemo(() => applyFilters(points, statuses, { ...filters, scope: 'active' }), [points, statuses, filters]);
 
   useEffect(() => {
     if (!map) return;
@@ -64,10 +64,11 @@ export function MapView({ filters, setFilters }: { filters: Filters; setFilters:
         }}
       />
       <div className="map-actions">
-        <button className="btn tiny" onClick={() => setShowFilters((x) => !x)}>Filtry{filters.statuses.length || filters.region || filters.query ? ' •' : ''}</button>
+        <button className="btn tiny" onClick={() => setShowFilters((x) => !x)}>Filtry{filters.statuses.length || filters.placeTypes.length || filters.region || filters.query ? ' •' : ''}</button>
         <button className="btn tiny" disabled={location.busy} onClick={locate}>{location.busy ? 'Szukam…' : 'Moja lokalizacja'}</button>
-        <button className="btn tiny primary" onClick={() => setAdding('pick')}>Dodaj punkt</button>
+        <button className="btn tiny" onClick={() => setAdding('pick')}>Dodaj punkt</button>
       </div>
+      <button className="btn primary fab" onClick={onQuickAdd}>＋ Plakat w tym miejscu</button>
       {location.error && <div className="map-note" role="status">{location.error}</div>}
       {showFilters && <div className="map-filters"><FilterBar value={filters} onChange={setFilters} /></div>}
       <div className="legend" aria-label="Legenda">

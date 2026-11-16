@@ -1,7 +1,7 @@
 import { looksSwapped, parseCoord, validLat, validLng } from '../lib/geo';
 import { idForSourceRef, newId } from '../lib/ids';
 import { parseCsv } from '../lib/csv';
-import type { PlaceType, Point } from '../lib/types';
+import { PLACE_LABEL, PLACE_TYPES, type PlaceType, type Point } from '../lib/types';
 import { isSameSpot } from './backup';
 
 export interface ImportedRow {
@@ -11,9 +11,12 @@ export interface ImportedRow {
 export interface PointsParse { rows: ImportedRow[]; errors: string[]; swapped: number }
 
 const TYPES: Record<string, PlaceType> = {
-  remiza: 'fire_station', fire_station: 'fire_station', tablica: 'notice_board', notice_board: 'notice_board',
-  inne: 'other', inny: 'other', other: 'other', '': 'other',
-  'tablica ogłoszeń': 'notice_board', 'inne miejsce': 'other',
+  '': 'other', inne: 'other', inny: 'other', remiza: 'fire_station', tablica: 'notice_board', 'słup': 'notice_board',
+  skrzyżowanie: 'crossroads', skrzyzowanie: 'crossroads', sklep: 'shop', przystanek: 'bus_stop',
+  'przy drodze': 'roadside', droga: 'roadside', kościół: 'church', kosciol: 'church', kaplica: 'church',
+  świetlica: 'community', swietlica: 'community', urząd: 'community', urzad: 'community',
+  ...Object.fromEntries(PLACE_TYPES.map((t) => [t, t])),
+  ...Object.fromEntries(PLACE_TYPES.map((t) => [PLACE_LABEL[t].toLowerCase(), t])),
 };
 const ALIASES: Record<string, string[]> = {
   name: ['nazwa', 'name'], type: ['typ', 'type'], locality: ['miejscowosc', 'miejscowość', 'locality'],
@@ -107,7 +110,7 @@ export function planPointsImport(rows: ImportedRow[], existing: Point[], ownerId
     const { line: _l, ...rest } = r;
     const p: Point = {
       ...rest, id: r.sourceRef ? idForSourceRef(`import:${r.sourceRef}`) : newId(), ownerId, source: 'import', osm: null,
-      createdAt: t, updatedAt: t, archivedAt: null, archiveReason: null, serverRev: null,
+      createdAt: t, updatedAt: t, archivedAt: null, archiveReason: null, deletedAt: null, serverRev: null,
     };
     create.push(p);
     seen.push(p);

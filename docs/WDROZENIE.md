@@ -1,5 +1,7 @@
 # Wdrożenie krok po kroku
 
+> Masz już działającą aplikację? Przejdź do sekcji **Aktualizacja do nowej wersji** na końcu.
+
 Wszystko poniżej jest bezpłatne. Nie podawaj karty, a jeśli jakaś strona jej wymaga, zatrzymaj się i daj znać. Układ paneli mógł się zmienić; jeśli nazwa przycisku jest inna, szukaj najbliższego odpowiednika.
 
 ## 1. Utwórz projekt Supabase
@@ -14,6 +16,7 @@ Wszystko poniżej jest bezpłatne. Nie podawaj karty, a jeśli jakaś strona jej
 1. W menu po lewej wybierz **SQL Editor**, potem **New query**.
 2. Otwórz plik `supabase/migrations/0001_schema.sql`, zaznacz całość, skopiuj i wklej do edytora.
 3. Kliknij **Run**. Powinno pojawić się „Success”.
+4. Kliknij **New query** jeszcze raz i tak samo uruchom plik `supabase/migrations/0002_kosz_i_rodzaje.sql`.
 4. Sprawdź w **Table Editor**, czy są tabele `points` i `visits`, obie z włączonym RLS.
 
 ## 3. Skonfiguruj logowanie i utwórz swoje konto
@@ -98,3 +101,32 @@ Stan sprawdzony 2026-11-06 ([cennik](https://supabase.com/pricing), [wstrzymywan
 - **Co zrobić:** zaloguj się do Supabase, otwórz projekt i kliknij przycisk przywrócenia, potem w aplikacji **Synchronizuj**.
 - **Czego nie zweryfikowałem:** dokładnego czasu, przez jaki wstrzymany projekt można przywrócić. Strona pomocy nie podała tego w treści, którą udało się odczytać. Dlatego nie zostawiaj projektu wstrzymanego na miesiące i trzymaj kopię JSON.
 - Warunki mogą się zmienić. Darmowy plan nie jest obietnicą dostępności.
+
+## Aktualizacja do nowej wersji
+
+Twoje punkty i wizyty są na telefonie i w Supabase. Aktualizacja ich nie usuwa ani nie zmienia. Zachowaj kolejność kroków.
+
+### Krok 1. Kopia na wszelki wypadek (iPhone)
+W aplikacji: **Ustawienia → Zapisz kopię danych** i zapisz plik w „Plikach”.
+
+### Krok 2. Aktualizacja bazy (Supabase), tylko jeśli plik SQL jest nowy
+1. Supabase → Twój projekt → **SQL Editor** → **New query**.
+2. Wklej całą zawartość nowego pliku z folderu `supabase/migrations` (dla wersji 1.1: `0002_kosz_i_rodzaje.sql`) i kliknij **Run**.
+3. Powinno pojawić się „Success. No rows returned”. Ten plik tylko dodaje kolumnę i rozszerza listę rodzajów miejsc; ponowne uruchomienie niczego nie psuje.
+
+Jeśli pominiesz ten krok, aplikacja pokaże komunikat „Baza w chmurze wymaga aktualizacji”. Zmiany poczekają wtedy bezpiecznie na telefonie.
+
+### Krok 3. Wysłanie kodu (GitHub Desktop)
+1. Otwórz GitHub Desktop. Po lewej zobaczysz listę zmienionych plików.
+2. W polu **Summary** (na dole po lewej) wpisz np. `Wersja 1.1`.
+3. Kliknij **Commit to main**.
+4. Kliknij **Push origin** na górnym pasku.
+
+### Krok 4. Publikacja (automatyczna)
+Na github.com w zakładce **Actions** pojawi się nowy wpis. Poczekaj na zielony znacznik (kilka minut).
+
+### Krok 5. Aktualizacja na iPhonie
+1. Otwórz aplikację z ikony.
+2. Gdy u góry pojawi się **„Dostępna nowa wersja”**, stuknij **Odśwież**.
+3. Jeśli pasek się nie pojawi: zamknij aplikację w przełączniku aplikacji i otwórz ponownie (czasem dwa razy).
+4. Sprawdź, czy punkty są na miejscu, a pasek pokazuje „Zapisano w chmurze”.

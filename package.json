@@ -1,7 +1,7 @@
 {
   "name": "plakaty",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:rls": "node scripts/test-rls.mjs",
     "test:rls:live": "node scripts/test-rls-live.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:upgrade": "node scripts/test-upgrade.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  buildQuery, candidateState, candidateToPoint, OverpassError, parseElements, possibleDuplicates, searchFireStations, type RawElement,
+  buildQuery, cacheKey, candidateState, candidateToPoint, categoryOf, OverpassError, parseElements, possibleDuplicates, radiusLimit, searchPlaces, type RawElement,
 } from '../../src/osm/overpass';
 import { addVisit, updatePoint } from '../../src/data/actions';
 import { freshIdb, repoFor } from './helpers';
@@ -17,7 +17,7 @@ const elements: RawElement[] = [
 
 describe('zapytanie i wyniki', () => {
   it('node, way, relation z tagiem amenity=fire_station', () => {
-    const q = buildQuery(50.06, 19.93, 25);
+    const q = buildQuery(50.06, 19.93, 25, ['fire_station']);
     expect(q).toContain('nwr["amenity"="fire_station"](around:25000,50.06000,19.93000)');
     expect(q).toContain('out center tags');
   });
@@ -26,7 +26,7 @@ describe('zapytanie i wyniki', () => {
     expect(c).toHaveLength(3);
     expect(c[0]).toMatchObject({ ref: 'node/1', name: 'OSP Testowo', locality: 'Testowo', address: 'Polna 5', hasName: true });
     expect(c[0].osm).toMatchObject({ type: 'node', id: 1, fetchedAt: t, representative: false });
-    expect(c[1].name).toBe('Obiekt bez nazwy w OSM (way/2)');
+    expect(c[1].name).toBe('Remiza bez nazwy w OSM (way/2)');
     expect(c[1].osm.representative).toBe(true);
     expect(c[1].locality).toBe(''); // nie wymyślamy
     expect(c[1].address).toBeNull();
@@ -42,34 +42,34 @@ describe('odporność', () => {
   it('jedna próba na serwer, potem koniec', async () => {
     const f = vi.fn(async () => new Response('', { status: 502 }));
     vi.stubGlobal('fetch', f);
-    await expect(searchFireStations({ lat: 50, lng: 20 }, 10, { endpoints: ['http://a', 'http://b'], online: true })).rejects.toMatchObject({ kind: 'server' });
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 10, ['fire_station'], { endpoints: ['http://a', 'http://b'], online: true })).rejects.toMatchObject({ kind: 'server' });
     expect(f).toHaveBeenCalledTimes(2);
   });
   it('przechodzi na serwer zapasowy', async () => {
     vi.stubGlobal('fetch', vi.fn(async (u: string) => (u === 'http://a' ? new Response('', { status: 429 }) : ok({ elements }))));
-    const r = await searchFireStations({ lat: 50, lng: 20 }, 10, { endpoints: ['http://a', 'http://b'], online: true });
+    const r = await searchPlaces({ lat: 50, lng: 20 }, 10, ['fire_station'], { endpoints: ['http://a', 'http://b'], online: true });
     expect(r.endpoint).toBe('http://b');
     expect(r.candidates).toHaveLength(3);
   });
   it('rozróżnia limit zapytań', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 429 })));
-    await expect(searchFireStations({ lat: 50, lng: 20 }, 10, { endpoints: ['http://a'], online: true })).rejects.toMatchObject({ kind: 'rate-limit' });
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 10, ['fire_station'], { endpoints: ['http://a'], online: true })).rejects.toMatchObject({ kind: 'rate-limit' });
   });
   it('HTTP 200 z uwagą o przerwaniu to błąd, nie niepełny wynik', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ok({ elements: [elements[0]], remark: 'runtime error: Query timed out in "query"' })));
-    await expect(searchFireStations({ lat: 50, lng: 20 }, 10, { endpoints: ['http://a'], online: true })).rejects.toBeInstanceOf(OverpassError);
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 10, ['fire_station'], { endpoints: ['http://a'], online: true })).rejects.toBeInstanceOf(OverpassError);
   });
   it('offline: bez żadnego żądania', async () => {
     const f = vi.fn(); vi.stubGlobal('fetch', f);
-    await expect(searchFireStations({ lat: 50, lng: 20 }, 10, { online: false })).rejects.toMatchObject({ kind: 'offline' });
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 10, ['fire_station'], { online: false })).rejects.toMatchObject({ kind: 'offline' });
     expect(f).not.toHaveBeenCalled();
   });
   it('promień poza limitem odrzucany', async () => {
-    await expect(searchFireStations({ lat: 50, lng: 20 }, 500, { online: true })).rejects.toThrow();
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 500, ['fire_station'], { online: true })).rejects.toThrow();
   });
   it('niepoprawny JSON', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>', { status: 200 })));
-    await expect(searchFireStations({ lat: 50, lng: 20 }, 10, { endpoints: ['http://a'], online: true })).rejects.toMatchObject({ kind: 'invalid' });
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 10, ['fire_station'], { endpoints: ['http://a'], online: true })).rejects.toMatchObject({ kind: 'invalid' });
   });
 });
 
@@ -98,5 +98,60 @@ describe('deduplikacja', () => {
     expect(repo.getSnapshot().statuses.get(c.id)).toBe('posted');
     expect(repo.getSnapshot().visits).toHaveLength(1);
     expect(repo.getSnapshot().points).toHaveLength(3);
+  });
+});
+
+describe('rodzaje miejsc', () => {
+  it('zapytanie łączy selektory wybranych rodzajów', () => {
+    const q = buildQuery(50, 20, 5, ['notice_board', 'bus_stop', 'community']);
+    expect(q).toContain('nwr["amenity"="notice_board"](around:5000');
+    expect(q).toContain('nwr["advertising"~"^(column|board)$"](around:5000');
+    expect(q).toContain('node["highway"="bus_stop"](around:5000');
+    expect(q).toContain('nwr["amenity"~"^(community_centre|townhall)$"]');
+    expect(q).toContain('out center tags 1500');
+  });
+  it('rozpoznaje rodzaj i nadaje uczciwą nazwę zastępczą', () => {
+    const c = parseElements([
+      { type: 'node', id: 1, lat: 50, lon: 20, tags: { advertising: 'column' } },
+      { type: 'node', id: 2, lat: 50, lon: 20, tags: { amenity: 'notice_board' } },
+      { type: 'node', id: 3, lat: 50, lon: 20, tags: { shop: 'convenience', name: 'Sklep Ewa' } },
+      { type: 'node', id: 4, lat: 50, lon: 20, tags: { highway: 'bus_stop', name: 'Zielonki Rynek' } },
+      { type: 'way', id: 5, center: { lat: 50, lon: 20 }, tags: { amenity: 'place_of_worship' } },
+      { type: 'way', id: 6, center: { lat: 50, lon: 20 }, tags: { amenity: 'community_centre' } },
+    ], t);
+    expect(c.map((x) => [x.category, x.name])).toEqual([
+      ['notice_board', 'Słup ogłoszeniowy bez nazwy w OSM (node/1)'],
+      ['notice_board', 'Tablica ogłoszeń bez nazwy w OSM (node/2)'],
+      ['shop', 'Sklep Ewa'],
+      ['bus_stop', 'Zielonki Rynek'],
+      ['church', 'Kościół / kaplica bez nazwy w OSM (way/5)'],
+      ['community', 'Świetlica / urząd bez nazwy w OSM (way/6)'],
+    ]);
+    expect(c.map((x) => candidateToPoint(x, 'u', null).placeType)).toEqual(['notice_board', 'notice_board', 'shop', 'bus_stop', 'church', 'community']);
+    expect(categoryOf({})).toBe('fire_station');
+  });
+  it('limit promienia dla licznych rodzajów', async () => {
+    expect(radiusLimit(['fire_station'])).toBe(50);
+    expect(radiusLimit(['fire_station', 'shop'])).toBe(10);
+    expect(radiusLimit(['bus_stop', 'shop'])).toBe(5);
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 8, ['bus_stop'], { online: true })).rejects.toThrow('1–5 km');
+    await expect(searchPlaces({ lat: 50, lng: 20 }, 8, [], { online: true })).rejects.toThrow('rodzaj');
+  });
+  it('zapamiętany wynik zależy od wybranych rodzajów', () => {
+    expect(cacheKey(50, 20, 10, ['shop', 'church'])).toBe(cacheKey(50, 20, 10, ['church', 'shop']));
+    expect(cacheKey(50, 20, 10, ['shop'])).not.toBe(cacheKey(50, 20, 10, ['church']));
+  });
+  it('wynik ucięty na limicie jest oznaczony', async () => {
+    const many = Array.from({ length: 1500 }, (_, i) => ({ type: 'node', id: i, lat: 50, lon: 20, tags: { shop: 'convenience' } }));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ elements: many }))));
+    const r = await searchPlaces({ lat: 50, lng: 20 }, 5, ['shop'], { endpoints: ['http://a'], online: true });
+    expect(r.truncated).toBe(true);
+  });
+  it('obiekt w koszu nie wraca jako nowy', async () => {
+    freshIdb();
+    const repo = await repoFor();
+    const [c] = parseElements(elements, t);
+    await repo.commit({ points: [{ ...candidateToPoint(c, repo.ownerId, null), deletedAt: t }] });
+    expect(candidateState(c, repo.getSnapshot().points)).toBe('deleted');
   });
 });

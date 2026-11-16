@@ -1,6 +1,6 @@
 import { distanceM, validLat, validLng } from '../lib/geo';
 import { newId } from '../lib/ids';
-import type { ConflictCopy, Outcome, Point, Visit } from '../lib/types';
+import { PLACE_TYPES, type ConflictCopy, type Outcome, type PlaceType, type Point, type Visit } from '../lib/types';
 import { sameContent } from '../sync/mapping';
 import type { Snapshot } from '../data/repository';
 
@@ -41,13 +41,14 @@ function pointErrors(p: Record<string, unknown>): string[] {
   const e: string[] = [];
   if (!UUID.test(String(p.id))) e.push('niepoprawne id');
   if (!isStr(p.name) || !String(p.name).trim()) e.push('brak nazwy');
-  if (!['fire_station', 'notice_board', 'other'].includes(p.placeType as string)) e.push('nieznany typ miejsca');
+  if (!PLACE_TYPES.includes(p.placeType as PlaceType)) e.push('nieznany typ miejsca');
   if (!['osm', 'manual', 'import'].includes(p.source as string)) e.push('nieznane źródło');
   if (!validLat(p.lat as number) || !validLng(p.lng as number)) e.push('niepoprawne współrzędne');
   if ((p.boardLat == null) !== (p.boardLng == null)) e.push('niepełne współrzędne tablicy');
   if (p.boardLat != null && (!validLat(p.boardLat as number) || !validLng(p.boardLng as number))) e.push('niepoprawne współrzędne tablicy');
   if (!isIso(p.createdAt) || !isIso(p.updatedAt)) e.push('niepoprawne daty');
   if (!orNull(p.archivedAt, isIso)) e.push('niepoprawna data archiwizacji');
+  if (!orNull(p.deletedAt, isIso)) e.push('niepoprawna data usunięcia');
   for (const k of ['locality', 'note']) if (!orNull(p[k], isStr)) e.push(`niepoprawne pole ${k}`);
   return e;
 }
@@ -90,7 +91,7 @@ export class ImportError extends Error {
 
 const POINT_DEFAULTS: Partial<Point> = {
   address: null, region: null, boardLat: null, boardLng: null, sourceRef: null, osm: null,
-  archivedAt: null, archiveReason: null, locality: '', note: '',
+  archivedAt: null, archiveReason: null, deletedAt: null, locality: '', note: '',
 };
 const VISIT_DEFAULTS: Partial<Visit> = { cancelledAt: null, cancelReason: null, gps: null, corrections: [], note: '' };
 

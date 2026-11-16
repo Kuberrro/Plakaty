@@ -8,11 +8,11 @@ function quote(cell: string, sep: string): string {
 }
 
 /** CSV dla polskiego Excela: BOM + średnik. Liczby nie są traktowane jako tekst do ochrony. */
-export function toCsv(rows: (string | number | null)[][], sep = ';'): string {
+export function toCsv(rows: (string | number | null)[][], sep = ';', bom = true): string {
   const body = rows
     .map((r) => r.map((c) => (typeof c === 'number' ? String(c) : quote(safeCell(c ?? ''), sep))).join(sep))
     .join('\r\n');
-  return `﻿${body}\r\n`;
+  return `${bom ? '\uFEFF' : ''}${body}\r\n`;
 }
 
 /** Parser RFC 4180: cudzysłowy, wieloliniowe pola, separator ; lub , (wykrywany z nagłówka). */

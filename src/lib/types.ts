@@ -1,4 +1,5 @@
-export type PlaceType = 'fire_station' | 'notice_board' | 'other';
+export type PlaceType =
+  | 'notice_board' | 'fire_station' | 'crossroads' | 'shop' | 'bus_stop' | 'roadside' | 'church' | 'community' | 'other';
 export type PointSource = 'osm' | 'manual' | 'import';
 export type Outcome = 'posted' | 'return' | 'impossible';
 export type PointStatus = 'todo' | Outcome;
@@ -32,6 +33,8 @@ export interface Point {
   updatedAt: string;
   archivedAt: string | null;
   archiveReason: string | null;
+  /** Kosz: punkt ukryty wszędzie (mapa, lista, raporty, eksporty), do przywrócenia. */
+  deletedAt: string | null;
   /** Wersja wiersza w chmurze, którą znamy. null = jeszcze nie było w chmurze. */
   serverRev: number | null;
 }
@@ -111,7 +114,17 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   impossible: 'Brak możliwości',
 };
 export const PLACE_LABEL: Record<PlaceType, string> = {
-  fire_station: 'Remiza',
   notice_board: 'Tablica ogłoszeń',
+  fire_station: 'Remiza',
+  crossroads: 'Skrzyżowanie',
+  shop: 'Sklep',
+  bus_stop: 'Przystanek',
+  roadside: 'Przy drodze',
+  church: 'Kościół / kaplica',
+  community: 'Świetlica / urząd',
   other: 'Inne miejsce',
 };
+export const PLACE_TYPES = Object.keys(PLACE_LABEL) as PlaceType[];
+
+/** Rekordy zapisane przed dodaniem kosza nie mają pola deletedAt. */
+export const normalizePoint = (p: Point): Point => ({ ...p, deletedAt: p.deletedAt ?? null });

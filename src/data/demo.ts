@@ -19,7 +19,7 @@ export async function seedDemo(repo: Repository) {
     placeType: i % 4 === 3 ? 'notice_board' : 'other', locality: 'Miejscowość demonstracyjna', address: null,
     region: regions[i % 3], lat: 50.0 + (i % 4) * 0.05, lng: 19.75 + Math.floor(i / 4) * 0.12,
     boardLat: null, boardLng: null, source: 'manual', sourceRef: null, osm: null, note: 'Dane demonstracyjne.',
-    createdAt: iso(10), updatedAt: iso(10), archivedAt: null, archiveReason: null, serverRev: null,
+    createdAt: iso(10), updatedAt: iso(10), archivedAt: null, archiveReason: null, deletedAt: null, serverRev: null,
   }));
   const visit = (p: Point, daysAgo: number, outcome: Outcome, posterCount: number): Visit => ({
     id: idForSourceRef(`demo-visit-${p.id}`), ownerId: repo.ownerId, pointId: p.id, visitedAt: iso(daysAgo), outcome, posterCount, note: '',

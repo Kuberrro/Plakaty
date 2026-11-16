@@ -1,6 +1,6 @@
 import { newId } from '../lib/ids';
 import { navigationTarget } from '../lib/navigation';
-import type { ActiveTarget, Outcome, Point, Visit, VisitGps } from '../lib/types';
+import type { ActiveTarget, Outcome, PlaceType, Point, Visit, VisitGps } from '../lib/types';
 import type { Repository } from './repository';
 
 const now = () => new Date().toISOString();
@@ -12,7 +12,7 @@ export async function createManualPoint(repo: Repository, d: PointDraft): Promis
   const t = now();
   const p: Point = {
     ...d, id: newId(), ownerId: repo.ownerId, source: 'manual', sourceRef: null, osm: null,
-    createdAt: t, updatedAt: t, archivedAt: null, archiveReason: null, serverRev: null,
+    createdAt: t, updatedAt: t, archivedAt: null, archiveReason: null, deletedAt: null, serverRev: null,
   };
   await repo.commit({ points: [p] });
   return p;
@@ -84,4 +84,55 @@ export async function startNavigation(repo: Repository, p: Point): Promise<Activ
 
 export async function cancelNavigation(repo: Repository): Promise<void> {
   await repo.commit({ activeTarget: null });
+}
+
+/** Kosz: punkt znika z mapy, listy, raportów i eksportów, ale nic nie jest kasowane. */
+export async function trashPoints(repo: Repository, points: Point[]): Promise<void> {
+  const t = now();
+  const ids = new Set(points.map((p) => p.id));
+  const active = repo.getSnapshot().activeTarget;
+  await repo.commit({
+    points: points.map((p) => ({ ...p, deletedAt: t, updatedAt: t })),
+    ...(active && ids.has(active.pointId) ? { activeTarget: null } : {}),
+  });
+}
+
+export async function untrashPoints(repo: Repository, points: Point[]): Promise<void> {
+  const t = now();
+  await repo.commit({ points: points.map((p) => ({ ...p, deletedAt: null, updatedAt: t })) });
+}
+
+export async function unarchivePoints(repo: Repository, points: Point[]): Promise<void> {
+  const t = now();
+  await repo.commit({ points: points.map((p) => ({ ...p, archivedAt: null, archiveReason: null, updatedAt: t })) });
+}
+
+export async function bulkUpdatePoints(
+  repo: Repository, points: Point[], patch: Partial<Pick<Point, 'region' | 'placeType'>>,
+): Promise<void> {
+  const t = now();
+  await repo.commit({ points: points.map((p) => ({ ...p, ...patch, updatedAt: t })) });
+}
+
+export interface QuickAddDraft {
+  name: string; placeType: PlaceType; region: string | null; lat: number; lng: number;
+  outcome: Outcome; posterCount: number; note: string; gps: VisitGps | null;
+}
+
+/** Nowy punkt i wizyta w JEDNEJ transakcji: albo zapisze się oba, albo nic. */
+export async function quickAdd(repo: Repository, d: QuickAddDraft): Promise<{ point: Point; visit: Visit }> {
+  checkDraft(d);
+  if (!d.name.trim()) throw new Error('Brak nazwy punktu');
+  const t = now();
+  const point: Point = {
+    id: newId(), ownerId: repo.ownerId, name: d.name.trim().slice(0, 200), placeType: d.placeType, locality: '', address: null,
+    region: d.region?.trim() || null, lat: d.lat, lng: d.lng, boardLat: null, boardLng: null, source: 'manual', sourceRef: null,
+    osm: null, note: '', createdAt: t, updatedAt: t, archivedAt: null, archiveReason: null, deletedAt: null, serverRev: null,
+  };
+  const visit: Visit = {
+    id: newId(), ownerId: repo.ownerId, pointId: point.id, visitedAt: t, outcome: d.outcome, posterCount: d.posterCount,
+    note: d.note.trim(), createdAt: t, updatedAt: t, cancelledAt: null, cancelReason: null, gps: d.gps, corrections: [], serverRev: null,
+  };
+  await repo.commit({ points: [point], visits: [visit] });
+  return { point, visit };
 }

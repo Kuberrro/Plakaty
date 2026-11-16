@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { archivePoint, cancelVisit, restorePoint, restoreVisit, startNavigation } from '../data/actions';
+import { archivePoint, cancelVisit, restorePoint, restoreVisit, startNavigation, trashPoints, untrashPoints } from '../data/actions';
 import { distanceTo } from '../lib/filters';
 import { distanceM, formatDistance } from '../lib/geo';
 import { googleMapsUrl, navigationTarget, TARGET_KIND_LABEL } from '../lib/navigation';
@@ -69,7 +69,7 @@ export function PointSheet({ id, onClose, onOpenOther }: { id: string; onClose: 
   const point = points.find((p) => p.id === id);
   const history = useMemo(() => visits.filter((v) => v.pointId === id).sort(compareVisitsNewestFirst), [visits, id]);
   const nearby = useMemo(
-    () => (point ? points.filter((o) => o.id !== id && !o.archivedAt && distanceM(point, o) <= NEARBY_DUPLICATE_M) : []),
+    () => (point ? points.filter((o) => o.id !== id && !o.archivedAt && !o.deletedAt && distanceM(point, o) <= NEARBY_DUPLICATE_M) : []),
     [points, point, id],
   );
   if (!point) return null;
@@ -97,6 +97,12 @@ export function PointSheet({ id, onClose, onOpenOther }: { id: string; onClose: 
     catch { toast('Nie udało się zapisać', 'error'); }
   }
 
+  async function trash() {
+    if (!window.confirm('Przenieść punkt do kosza? Zniknie z mapy, listy, raportów i eksportów. Możesz go przywrócić z kosza (Lista → Pokaż: Kosz).')) return;
+    try { await trashPoints(repo, [point!]); toast('Przeniesiono do kosza'); onClose(); }
+    catch { toast('Nie udało się zapisać', 'error'); }
+  }
+
   return (
     <div className="overlay" role="dialog" aria-label={point.name}>
       <header className="sheet-head">
@@ -106,11 +112,19 @@ export function PointSheet({ id, onClose, onOpenOther }: { id: string; onClose: 
       <div className="scroll pad stack">
         <div className="row wrap">
           <span className={`badge status-${status}`}>{STATUS_SYMBOL[status]} {STATUS_LABEL[status]}</span>
+          {point.deletedAt && <span className="badge status-impossible">W koszu</span>}
           {point.archivedAt && <span className="badge">Zarchiwizowany{point.archiveReason ? `: ${point.archiveReason}` : ''}</span>}
           <SyncLabel entity="point" rec={point} />
         </div>
 
-        {!point.archivedAt && (
+        {point.deletedAt && (
+          <section className="stack notice">
+            <p>Ten punkt jest w koszu: nie pojawia się na mapie, liście, w raportach ani eksportach.</p>
+            <button className="btn primary" onClick={() => untrashPoints(repo, [point]).then(() => toast('Przywrócono z kosza'), () => toast('Nie udało się zapisać', 'error'))}>Przywróć z kosza</button>
+          </section>
+        )}
+
+        {!point.archivedAt && !point.deletedAt && (
           <section className="stack">
             <button className="btn primary" data-testid="navigate" onClick={navigate}>Nawiguj</button>
             <p className="small muted">
@@ -128,7 +142,7 @@ export function PointSheet({ id, onClose, onOpenOther }: { id: string; onClose: 
         <section className="stack">
           <h3>Dane</h3>
           <dl className="details">
-            <dt>Typ</dt><dd>{PLACE_LABEL[point.placeType]}</dd>
+            <dt>Rodzaj</dt><dd>{PLACE_LABEL[point.placeType] ?? point.placeType}</dd>
             <dt>Miejscowość</dt><dd>{point.locality || <span className="muted">brak danych</span>}</dd>
             {point.address && <><dt>Adres</dt><dd>{point.address}</dd></>}
             <dt>Rejon</dt><dd>{point.region || <span className="muted">nie ustawiono</span>}</dd>
@@ -147,7 +161,8 @@ export function PointSheet({ id, onClose, onOpenOther }: { id: string; onClose: 
           )}
           <div className="row wrap">
             <button className="btn tiny" onClick={() => setMode('edit')}>Edytuj</button>
-            {point.archivedAt
+            {!point.deletedAt && <button className="btn tiny danger" onClick={trash}>Usuń</button>}
+            {point.deletedAt ? null : point.archivedAt
               ? <button className="btn tiny" onClick={() => restorePoint(repo, point).then(() => toast('Przywrócono punkt'), () => toast('Nie udało się zapisać', 'error'))}>Przywróć z archiwum</button>
               : <button className="btn tiny" onClick={archive}>Archiwizuj</button>}
           </div>

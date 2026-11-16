@@ -29,6 +29,7 @@ Otwórz adres z terminala. Bez konfiguracji działają tryb lokalny i demonstrac
 | `npm run test:rls` | RLS na tymczasowym lokalnym Postgresie (wymaga zainstalowanego Postgresa) |
 | `npm run test:e2e` | testy w Chrome (rozmiar iPhone'a, ścieżka jak na GitHub Pages) |
 | `npm run test:rls:live` | RLS na prawdziwym projekcie Supabase |
+| `npm run test:upgrade` | aktualizacja bazy na danych z wersji 1.0: nic się nie zmienia |
 | `npm run build` | sprawdzenie typów, build, kontrola sekretów |
 
 ## Tryby pracy
@@ -40,6 +41,17 @@ Otwórz adres z terminala. Bez konfiguracji działają tryb lokalny i demonstrac
 | Demonstracyjny | przycisk na ekranie startowym | IndexedDB `plakaty-demo`, dane fikcyjne, bez chmury |
 
 Kopii z trybu demonstracyjnego nie da się wczytać do prawdziwych danych.
+
+## Wersja 1.1
+
+- **Plakat w tym miejscu:** jeden ekran zapisuje nowy punkt w lokalizacji telefonu razem z wizytą. Ostrzega, gdy w promieniu 40 m jest już zapisany punkt.
+- **Rodzaje miejsc:** tablica ogłoszeń, remiza, skrzyżowanie, sklep, przystanek, przy drodze, kościół / kaplica, świetlica / urząd, inne. Filtr rodzaju na mapie i liście.
+- **Kosz:** „Usuń” przenosi punkt do kosza. Znika z mapy, listy, raportów i eksportów; można go przywrócić. Historia zostaje.
+- **Zaznacz wiele** na liście: usuwanie do kosza, przywracanie, zmiana rejonu i rodzaju dla wielu punktów naraz.
+- **Znajdź miejsca:** tablice i słupy ogłoszeniowe, remizy, świetlice i urzędy, kościoły, sklepy (do 10 km), przystanki (do 5 km).
+- **Mapa do udostępnienia:** CSV dla Google Moje Mapy z wybranymi statusami (domyślnie „Plakat powieszony”).
+
+Baza: aktualizacja `0002_kosz_i_rodzaje.sql` (instrukcja w [docs/WDROZENIE.md](docs/WDROZENIE.md)).
 
 ## Reguły danych
 
@@ -53,6 +65,8 @@ Kopii z trybu demonstracyjnego nie da się wczytać do prawdziwych danych.
 | Unikalne odwiedzone | aktywne punkty z co najmniej jedną nieanulowaną wizytą; kilka wizyt liczy się raz |
 | Statusy | aktualny status aktywnych punktów |
 | Suma plakatów | plakaty z nieanulowanych wizyt, także w punktach później zarchiwizowanych |
+
+Punkty w koszu i ich wizyty nie liczą się nigdzie.
 
 Wizyta to zdarzenie, punkt to miejsce, plakaty to sztuki. Daty raportów to dni kalendarzowe w strefie Europe/Warsaw.
 
@@ -86,7 +100,7 @@ Szablony: [public/szablony/punkty.csv](public/szablony/punkty.csv), [public/szab
 | `nazwa` | tak | nazwa miejsca |
 | `lat` | tak | szerokość, np. `50.0614` lub `50,0614` |
 | `lng` | tak | długość, np. `19.9366` |
-| `typ` | nie | `remiza`, `tablica` lub `inne` (domyślnie) |
+| `typ` | nie | `tablica`, `remiza`, `skrzyżowanie`, `sklep`, `przystanek`, `przy drodze`, `kościół`, `świetlica` lub `inne` (domyślnie) |
 | `miejscowosc`, `adres`, `rejon`, `notatka` | nie | tekst |
 | `tablica_lat`, `tablica_lng` | nie | oba albo żaden |
 | `id_zrodlowe` | nie | stały identyfikator; zapobiega duplikatom przy ponownym imporcie |
@@ -109,6 +123,7 @@ Aktualizacja aplikacji pyta o zgodę i nie dotyka IndexedDB.
 
 - **iPhone:** Safari może usuwać dane stron nieużywanych przez 7 dni. Korzystaj z aplikacji dodanej do ekranu początkowego. Safari i aplikacja na ekranie mają osobne dane, więc po dodaniu zaloguj się w aplikacji.
 - **Supabase Free** (stan z 2026-11-06, [cennik](https://supabase.com/pricing)): 500 MB bazy, 5 GB transferu, 2 aktywne projekty, brak automatycznych kopii. Projekt jest wstrzymywany po tygodniu bez aktywności, z mailem z wyprzedzeniem. Dane zostają, ale do czasu wznowienia w panelu synchronizacja nie działa; praca na telefonie trwa. Szczegóły: [docs/WDROZENIE.md](docs/WDROZENIE.md).
+- **Tablice w OSM:** wokół Krakowa są w OpenStreetMap prawie nieobecne (sprawdzone 2026-11-16 na jednym serwerze), więc główną metodą jest „Plakat w tym miejscu”.
 - **Overpass:** publiczne, przeciążone serwery bez gwarancji dostępności. Jedno kliknięcie to najwyżej po jednej próbie na każdy z 3 serwerów, bez automatycznych powtórzeń. Dokumentacja Overpass odradza opieranie masowych aplikacji na publicznych serwerach; tu działa to jako narzędzie jednego użytkownika z rzadkimi zapytaniami.
 - **Podkład OSM:** bez SLA, dostęp może zostać ograniczony. Adres można zmienić zmienną `VITE_TILE_URL`.
 - **Google Maps:** adres uruchamia nawigację, ale nie zwraca potwierdzenia przyjazdu.

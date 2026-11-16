@@ -7,7 +7,7 @@ export function pointToRow(p: Point, userId: string, opId: string): Row {
     user_id: userId, id: p.id, name: p.name, place_type: p.placeType, locality: p.locality, address: p.address,
     region: p.region, lat: p.lat, lng: p.lng, board_lat: p.boardLat, board_lng: p.boardLng, source: p.source,
     source_ref: p.sourceRef, osm: p.osm, note: p.note, created_at: p.createdAt, updated_at: p.updatedAt,
-    archived_at: p.archivedAt, archive_reason: p.archiveReason, last_op_id: opId,
+    archived_at: p.archivedAt, archive_reason: p.archiveReason, deleted_at: p.deletedAt ?? null, last_op_id: opId,
   };
 }
 
@@ -21,7 +21,8 @@ export function rowToPoint(r: Row, ownerId: string): Point {
     lat: r.lat as number, lng: r.lng as number, boardLat: r.board_lat as number | null, boardLng: r.board_lng as number | null,
     source: r.source as Point['source'], sourceRef: r.source_ref as string | null, osm: r.osm as Point['osm'],
     note: r.note as string, createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
-    archivedAt: isoN(r.archived_at), archiveReason: r.archive_reason as string | null, serverRev: r.server_rev as number,
+    archivedAt: isoN(r.archived_at), archiveReason: r.archive_reason as string | null, deletedAt: isoN(r.deleted_at),
+    serverRev: r.server_rev as number,
   };
 }
 
@@ -51,7 +52,7 @@ export function rowToVisit(r: Row, ownerId: string): Visit {
 export function sameContent(a: Point | Visit, b: Point | Visit): boolean {
   const strip = (x: Point | Visit) => {
     const { updatedAt: _u, createdAt: _c, serverRev: _s, ...rest } = x;
-    return rest;
+    return 'deletedAt' in rest || 'lat' in rest ? { ...rest, deletedAt: (rest as Point).deletedAt ?? null } : rest;
   };
   const canon = (o: unknown): unknown =>
     Array.isArray(o) ? o.map(canon)

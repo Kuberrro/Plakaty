@@ -4,7 +4,7 @@
 // Opcjonalnie: POSTGREST_BIN=/ścieżka/postgrest doda test synchronizacji przez API.
 // Test na prawdziwym projekcie: npm run test:rls:live.
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -55,8 +55,11 @@ const visitSql = (user, id, point) => `insert into public.visits (user_id,id,poi
 try {
   await db.query(readFileSync('tests/rls/emulate_supabase.sql', 'utf8'));
   await db.query(`insert into auth.users values ('${A}'),('${B}')`);
-  await db.query(readFileSync('supabase/migrations/0001_schema.sql', 'utf8'));
-  console.log('Migracja wykonana na czystej bazie.');
+  const migrations = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql')).sort();
+  for (const m of migrations) await db.query(readFileSync(`supabase/migrations/${m}`, 'utf8'));
+  // Druga aktualizacja musi dać się bezpiecznie uruchomić ponownie.
+  for (const m of migrations.slice(1)) await db.query(readFileSync(`supabase/migrations/${m}`, 'utf8'));
+  console.log(`Migracje wykonane na czystej bazie: ${migrations.join(', ')} (aktualizacje dwukrotnie).`);
 
   console.log('\nNiezalogowany:');
   await as('authenticated', A, pointSql(A, P1));
@@ -98,6 +101,18 @@ try {
   check('pusta nazwa odrzucona', (await as('authenticated', A, `update public.points set name='  ' where id='${P1}'`)).error === '23514');
   check('tablica bez drugiej współrzędnej odrzucona', (await as('authenticated', A, `update public.points set board_lat=50 where id='${P1}'`)).error === '23514');
   check('ujemne plakaty odrzucone', (await as('authenticated', A, `update public.visits set poster_count=-1 where id='${V1}'`)).error === '23514');
+  console.log('\nAktualizacja 0002:');
+  check('nowy rodzaj miejsca przyjęty', !(await as('authenticated', A, `update public.points set place_type='bus_stop' where id='${P1}'`)).error);
+  check('nieznany rodzaj nadal odrzucony', (await as('authenticated', A, `update public.points set place_type='kino' where id='${P1}'`)).error === '23514');
+  check('kosz: deleted_at zapisywalne przez właściciela', (await as('authenticated', A, `update public.points set deleted_at=now() where id='${P1}'`)).count === 1);
+  check('drugie konto nie ustawi kosza u A', (await as('authenticated', B, `update public.points set deleted_at=now() where id='${P1}' and user_id='${A}'`)).count === 0);
+  const view2 = await as('authenticated', A, `select status, deleted_at from public.point_status where point_id='${P1}'`);
+  check('widok pokazuje kosz i nadal liczy status', view2.rows?.[0]?.status === 'posted' && !!view2.rows?.[0]?.deleted_at, JSON.stringify(view2));
+  const opts = await db.query(`select reloptions from pg_class where relname='point_status'`);
+  check('widok nadal z security_invoker', String(opts.rows[0]?.reloptions).includes('security_invoker=true'), JSON.stringify(opts.rows));
+  check('widok po aktualizacji nadal niedostępny bez logowania', (await as('anon', null, 'select * from public.point_status')).error === '42501');
+  check('widok po aktualizacji nadal pusty dla drugiego konta', (await as('authenticated', B, `select * from public.point_status where user_id='${A}'`)).rows?.length === 0);
+
   check('właściciel może usunąć swoją wizytę', (await as('authenticated', A, `delete from public.visits where id='${V1}'`)).count === 1);
 
   const tables = await db.query(`select c.relname, c.relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace

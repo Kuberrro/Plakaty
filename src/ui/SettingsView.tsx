@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
 import { createBackup, ImportError, MAX_IMPORT_BYTES, parseBackup, planImport, type ImportPlan } from '../io/backup';
-import { pointsGeoJson } from '../io/exports';
+import { MY_MAPS_MAX_ROWS, myMapsCsv, pointsForSharing, pointsGeoJson } from '../io/exports';
 import { parsePointsCsv, parsePointsGeoJson, planPointsImport, type PointsParse, type PointsPlan } from '../io/importPoints';
 import { saveFile } from '../io/share';
 import { formatDateTime, warsawDay } from '../lib/time';
-import type { ConflictCopy, Point, Visit } from '../lib/types';
+import { regionsOf, type ListScope } from '../lib/filters';
+import { NO_REGION } from '../lib/stats';
+import { STATUS_LABEL, STATUS_SYMBOL, type ConflictCopy, type Point, type PointStatus, type Visit } from '../lib/types';
 import { useApp, useSnapshot, useSyncState } from './hooks';
 
 const BASE = import.meta.env.BASE_URL;
@@ -176,11 +178,63 @@ function PointsIo() {
   );
 }
 
-export function SettingsView({ onLeave, onResetDemo, onShowArchive }: { onLeave: () => Promise<void>; onResetDemo: () => void; onShowArchive: () => void }) {
+function MyMapsExport() {
+  const { toast } = useApp();
+  const { points, visits, statuses } = useSnapshot();
+  const [chosen, setChosen] = useState<PointStatus[]>(['posted']);
+  const [region, setRegion] = useState('');
+  const [notes, setNotes] = useState(false);
+  const [archived, setArchived] = useState(false);
+  const list = pointsForSharing(points, statuses, { statuses: chosen, region: region || null, includeArchived: archived });
+  const toggle = (s: PointStatus) => setChosen(chosen.includes(s) ? chosen.filter((x) => x !== s) : [...chosen, s]);
+
+  async function save() {
+    if (!window.confirm(`Plik pokaże lokalizacje ${list.length} punktów każdemu, komu udostępnisz mapę${notes ? ', razem z notatkami' : ''}. Kontynuować?`)) return;
+    try {
+      const ok = await saveFile(`plakaty-mapa-${warsawDay(new Date())}.csv`, myMapsCsv(list, visits, statuses, notes), 'text/csv;charset=utf-8');
+      if (ok) toast(`Plik gotowy: ${list.length} punktów`);
+    } catch { toast('Nie udało się zapisać pliku', 'error'); }
+  }
+
+  return (
+    <section className="card stack" data-testid="mymaps">
+      <h3>Mapa do udostępnienia (Google Moje Mapy)</h3>
+      <p className="small">Plik CSV z wybranymi punktami. Punkty z kosza nigdy nie są eksportowane.</p>
+      <div className="chips">
+        {(['posted', 'return', 'impossible', 'todo'] as PointStatus[]).map((s) => (
+          <button key={s} className={`chip ${chosen.includes(s) ? 'on' : ''}`} aria-pressed={chosen.includes(s)} onClick={() => toggle(s)}>
+            {STATUS_SYMBOL[s]} {STATUS_LABEL[s]}
+          </button>
+        ))}
+      </div>
+      <select aria-label="Rejon eksportu" value={region} onChange={(e) => setRegion(e.target.value)}>
+        <option value="">Wszystkie rejony</option>
+        {regionsOf(points).map((r) => <option key={r} value={r}>{r}</option>)}
+        <option value={NO_REGION}>{NO_REGION}</option>
+      </select>
+      <label className="inline small"><input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Dołącz zarchiwizowane</label>
+      <label className="inline small"><input type="checkbox" checked={notes} onChange={(e) => setNotes(e.target.checked)} /> Dołącz notatki (mogą być prywatne)</label>
+      {list.length > MY_MAPS_MAX_ROWS && <p className="error-text small">Moje Mapy przyjmują najwyżej {MY_MAPS_MAX_ROWS} wierszy w jednym pliku. Zawęź wybór (np. rejonem).</p>}
+      <button className="btn primary" disabled={!list.length || !chosen.length} onClick={save} data-testid="mymaps-save">Zapisz plik dla Moich Map ({list.length})</button>
+      <details className="small"><summary>Jak wgrać do Google Moje Mapy</summary>
+        <ol>
+          <li>Na komputerze wejdź na mymaps.google.com i kliknij <b>Utwórz nową mapę</b>.</li>
+          <li>W warstwie kliknij <b>Importuj</b> i wybierz zapisany plik.</li>
+          <li>Jako kolumny pozycji zaznacz <b>Latitude</b> i <b>Longitude</b>, jako tytuł <b>Nazwa</b>.</li>
+          <li>Kliknij <b>Udostępnij</b> i dodaj adres osoby koordynującej.</li>
+        </ol>
+        <p>Plik to jednorazowa kopia: nowe punkty wymagają ponownego eksportu i importu do nowej warstwy.</p>
+      </details>
+    </section>
+  );
+}
+
+export function SettingsView({ onLeave, onResetDemo, onShowList }: { onLeave: () => Promise<void>; onResetDemo: () => void; onShowList: (scope: ListScope) => void }) {
   const { scope, engine } = useApp();
   const { outbox, points } = useSnapshot();
   const sync = useSyncState(engine);
-  const archived = points.filter((p) => p.archivedAt).length;
+  const archived = points.filter((p) => p.archivedAt && !p.deletedAt).length;
+  const trashed = points.filter((p) => p.deletedAt).length;
 
   async function logout() {
     const n = outbox.size;
@@ -212,9 +266,11 @@ export function SettingsView({ onLeave, onResetDemo, onShowArchive }: { onLeave:
       <Conflicts />
       <BackupSection />
       <PointsIo />
+      <MyMapsExport />
       <section className="card stack">
-        <h3>Archiwum</h3>
-        <button className="btn" onClick={onShowArchive}>Pokaż zarchiwizowane ({archived})</button>
+        <h3>Archiwum i kosz</h3>
+        <button className="btn" onClick={() => onShowList('archived')}>Pokaż zarchiwizowane ({archived})</button>
+        <button className="btn" onClick={() => onShowList('trash')}>Pokaż kosz ({trashed})</button>
       </section>
       <section className="card stack small">
         <h3>Informacje</h3>

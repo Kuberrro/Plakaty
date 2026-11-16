@@ -3,7 +3,7 @@ import { supabase } from '../auth/client';
 import { clearDemo, seedDemo } from '../data/demo';
 import { openScopeDb, scopeOwnerId, type Scope } from '../data/db';
 import { Repository } from '../data/repository';
-import { EMPTY_FILTERS, type Filters } from '../lib/filters';
+import { EMPTY_FILTERS, type Filters, type ListScope } from '../lib/filters';
 import { supabaseBackend } from '../sync/backend';
 import { SyncEngine } from '../sync/engine';
 import { ActiveTargetCard } from './ActiveTargetCard';
@@ -13,6 +13,7 @@ import { Ctx, useGeo, type AppCtx } from './hooks';
 import { ListView } from './ListView';
 import { MapView } from './MapView';
 import { PointSheet } from './PointSheet';
+import { QuickAdd } from './QuickAdd';
 import { ReportsView } from './ReportsView';
 import { SettingsView } from './SettingsView';
 import { StatusBar } from './StatusBar';
@@ -44,6 +45,7 @@ export function Workspace({ scope, onLeave }: { scope: Scope; onLeave: () => Pro
   const [tab, setTab] = useTab();
   const [openId, setOpenId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [quick, setQuick] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -129,11 +131,11 @@ export function Workspace({ scope, onLeave }: { scope: Scope; onLeave: () => Pro
         <ActiveTargetCard />
         <BackupReminder onOpen={() => setTab('ustawienia')} />
         <main className="view">
-          {tab === 'mapa' && <MapView filters={filters} setFilters={setFilters} />}
-          {tab === 'lista' && <ListView filters={filters} setFilters={setFilters} />}
+          {tab === 'mapa' && <MapView filters={filters} setFilters={setFilters} onQuickAdd={() => setQuick(true)} />}
+          {tab === 'lista' && <ListView filters={filters} setFilters={setFilters} onQuickAdd={() => setQuick(true)} />}
           {tab === 'znajdz' && <FindView />}
           {tab === 'raporty' && <ReportsView />}
-          {tab === 'ustawienia' && <SettingsView onLeave={leave} onResetDemo={resetDemo} onShowArchive={() => { setFilters({ ...EMPTY_FILTERS, archived: true }); setTab('lista'); }} />}
+          {tab === 'ustawienia' && <SettingsView onLeave={leave} onResetDemo={resetDemo} onShowList={(scope: ListScope) => { setFilters({ ...EMPTY_FILTERS, scope }); setTab('lista'); }} />}
         </main>
         <nav className="tabbar" aria-label="Widoki">
           {TABS.map(([id, label, icon]) => (
@@ -142,6 +144,7 @@ export function Workspace({ scope, onLeave }: { scope: Scope; onLeave: () => Pro
             </button>
           ))}
         </nav>
+        {quick && <QuickAdd onClose={() => setQuick(false)} />}
         {openId && <PointSheet id={openId} onClose={() => setOpenId(null)} onOpenOther={reachedPoint} />}
         {toastMsg && <div className={`toast ${toastMsg.kind}`} role="status">{toastMsg.text}</div>}
       </div>

@@ -3,6 +3,7 @@ import { statusMap } from '../lib/status';
 import type {
   ActiveTarget, ConflictCopy, EntityName, OutboxOp, Point, PointStatus, Visit,
 } from '../lib/types';
+import { normalizePoint } from '../lib/types';
 import type { Db } from './db';
 
 export interface Snapshot {
@@ -52,7 +53,7 @@ export class Repository {
       this.db.getAll('points'), this.db.getAll('visits'), this.db.getAll('outbox'), this.db.getAll('conflicts'),
       this.db.get('meta', ACTIVE), this.db.get('meta', BACKUP),
     ]);
-    this.points = new Map(points.map((p) => [p.id, p]));
+    this.points = new Map(points.map((p) => [p.id, normalizePoint(p)]));
     this.visits = new Map(visits.map((v) => [v.id, v]));
     this.outbox = new Map(outbox.map((o) => [o.key, o]));
     this.conflicts = new Map(conflicts.map((c) => [c.id, c]));

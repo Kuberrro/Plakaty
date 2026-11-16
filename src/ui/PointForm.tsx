@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createManualPoint, updatePoint, type PointDraft } from '../data/actions';
 import { regionsOf } from '../lib/filters';
 import { parseCoord, validLat, validLng } from '../lib/geo';
-import { PLACE_LABEL, type PlaceType, type Point } from '../lib/types';
+import { PLACE_LABEL, PLACE_TYPES, type PlaceType, type Point } from '../lib/types';
 import { CoordPicker } from './CoordPicker';
 import { useApp, useSnapshot } from './hooks';
 
@@ -64,9 +64,9 @@ export function PointForm({ point, initial, onClose }: {
       </header>
       <div className="scroll pad stack">
         <label>Nazwa<input value={f.name} maxLength={200} onChange={set('name')} /></label>
-        <label>Typ miejsca
+        <label>Rodzaj miejsca
           <select value={f.placeType} onChange={set('placeType')}>
-            {(Object.keys(PLACE_LABEL) as PlaceType[]).map((t) => <option key={t} value={t}>{PLACE_LABEL[t]}</option>)}
+            {PLACE_TYPES.map((t) => <option key={t} value={t}>{PLACE_LABEL[t]}</option>)}
           </select>
         </label>
         <label>Miejscowość<input value={f.locality} onChange={set('locality')} /></label>

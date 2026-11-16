@@ -20,8 +20,13 @@ export interface SyncBackend {
   list(table: Table, q: PageQuery): Promise<Row[]>;
 }
 
+export const SCHEMA_OUTDATED = 'Baza w chmurze wymaga aktualizacji (krok „Aktualizacja bazy” w instrukcji). Zmiany czekają bezpiecznie na telefonie.';
+
 function classify(e: { message?: string; code?: string; status?: number } | null, status?: number): BackendError {
   const message = e?.message ?? 'Nieznany błąd';
+  if (e?.code === 'PGRST204' || /deleted_at|place_type_check/.test(message)) {
+    return new BackendError(SCHEMA_OUTDATED, 'rejected');
+  }
   if (status === 401 || e?.code === 'PGRST301' || e?.code === 'PGRST303') return new BackendError('Sesja wygasła. Zaloguj się ponownie.', 'auth');
   if (status === 403 || e?.code === '42501') return new BackendError(`Odmowa dostępu: ${message}`, 'rejected');
   if (!status || status === 408 || status === 429 || status >= 500 || /fetch|network/i.test(message)) {

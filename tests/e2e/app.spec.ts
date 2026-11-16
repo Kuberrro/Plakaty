@@ -46,9 +46,10 @@ test('1, 2, 15: wyszukanie, dodanie, ponowne wyszukanie bez duplikatów; awaria 
   await enterDemo(page);
   await tab(page, 'Znajdź');
   await expect(page.getByText('Wyniki pochodzą z OpenStreetMap i mogą być niekompletne')).toBeVisible();
+  await expect(page.getByText(/Obecność obiektu nie potwierdza dostępności tablicy/)).toBeVisible();
   expect(bodies).toHaveLength(0); // nic bez kliknięcia
 
-  await page.getByRole('button', { name: 'Wyszukaj remizy' }).click();
+  await page.getByRole('button', { name: 'Wyszukaj', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('przeciążone');
   expect(bodies).toHaveLength(3); // po jednej próbie na serwer, bez pętli
 
@@ -60,11 +61,12 @@ test('1, 2, 15: wyszukanie, dodanie, ponowne wyszukanie bez duplikatów; awaria 
 
   mode = 'ok'; bodies = [];
   await tab(page, 'Znajdź');
-  await page.getByRole('button', { name: 'Wyszukaj remizy' }).click();
+  await page.getByRole('button', { name: 'Wyszukaj', exact: true }).click();
   await expect(page.getByText('OSP Pierwsza')).toBeVisible();
-  await expect(page.getByText('Obiekt bez nazwy w OSM (way/202)')).toBeVisible();
+  await expect(page.getByText('Remiza bez nazwy w OSM (way/202)')).toBeVisible();
   expect(bodies[0]).toContain('fire_station');
   await page.getByRole('button', { name: /Dodaj wszystkie nowe \(2\)/ }).click();
+  await page.getByLabel('Pokaż tylko nowe').uncheck();
   await expect(page.getByText('Już w bazie')).toHaveCount(2);
 
   // Korekta i wizyta w dodanym punkcie.
@@ -76,7 +78,7 @@ test('1, 2, 15: wyszukanie, dodanie, ponowne wyszukanie bez duplikatów; awaria 
 
   // Ponowne wyszukiwanie: wynik z pamięci i na nowo z sieci.
   await tab(page, 'Znajdź');
-  await page.getByRole('button', { name: 'Wyszukaj remizy' }).click();
+  await page.getByRole('button', { name: 'Wyszukaj', exact: true }).click();
   await expect(page.getByText('zapamiętane wyniki')).toBeVisible();
   await page.getByRole('button', { name: 'Pobierz na nowo' }).click();
   await expect(page.getByRole('button', { name: /Dodaj wszystkie nowe \(0\)/ })).toBeDisabled();
@@ -89,7 +91,7 @@ test('1, 2, 15: wyszukanie, dodanie, ponowne wyszukanie bez duplikatów; awaria 
 test('3, 4, 5, 6, 7: punkt ręczny, tablica, nawigacja i aktywny cel', async ({ page, context }) => {
   await context.route('https://www.google.com/**', (r) => r.fulfill({ body: 'ok', contentType: 'text/html' }));
   await enterDemo(page);
-  await page.getByRole('button', { name: 'Dodaj punkt' }).click();
+  await page.getByRole('button', { name: 'Dodaj punkt', exact: true }).click();
   await page.getByRole('button', { name: 'Użyj tego miejsca' }).click();
   await page.getByLabel('Nazwa').fill('Tablica przy sklepie');
   await page.getByLabel('Miejscowość').fill('Zielonki');
@@ -305,4 +307,135 @@ test('karta aktywnego celu zwija się, a widok wydruku ukrywa nawigację', async
   await expect(page.locator('.tabbar')).toBeHidden();
   await expect(page.locator('.active-target')).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Raport wizyt' })).toBeVisible();
+});
+
+test('nowe: szybkie dodanie z GPS tworzy punkt i wizytę jednym przyciskiem', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 50.2222, longitude: 19.8888, accuracy: 9 });
+  await enterDemo(page);
+  const active = await count(page, 'active');
+  const posters = await count(page, 'postersTotal');
+  await tab(page, 'Mapa');
+  await page.getByRole('button', { name: '＋ Plakat w tym miejscu' }).click();
+  await expect(page.getByTestId('quick-position')).toContainText('50.22220, 19.88880 (GPS, dokładność ok. 9 m)');
+  await page.getByRole('radio', { name: 'Przystanek' }).click();
+  await page.getByRole('button', { name: 'Więcej' }).click();
+  await page.getByRole('button', { name: 'Zapisz punkt i wizytę' }).click();
+  await expect(page.getByRole('dialog', { name: 'Plakat w tym miejscu' })).toBeHidden();
+  expect(await count(page, 'active')).toBe(active + 1);
+  expect(await count(page, 'postersTotal')).toBe(posters + 2);
+  await tab(page, 'Lista');
+  await expect(page.getByRole('button', { name: /Przystanek · .*Plakat powieszony · Przystanek/ })).toBeVisible();
+
+  // Ponownie w tym samym miejscu: propozycja wizyty w istniejącym punkcie zamiast duplikatu.
+  await page.getByRole('button', { name: '＋ Plakat w tym miejscu' }).click();
+  await expect(page.getByTestId('quick-near')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Przystanek' })).toHaveAttribute('aria-checked', 'true'); // zapamiętany rodzaj
+  await page.getByTestId('quick-near').getByRole('button', { name: /Wizyta w: Przystanek/ }).click();
+  expect(await count(page, 'active')).toBe(active + 1);
+  expect(await count(page, 'postersTotal')).toBe(posters + 3);
+});
+
+test('nowe: bez zgody na GPS szybkie dodanie działa przez wskazanie na mapie', async ({ page }) => {
+  await page.addInitScript(() => {
+    navigator.geolocation.getCurrentPosition = (_ok, err) => err?.({ code: 1, message: 'denied' } as GeolocationPositionError);
+  });
+  await enterDemo(page);
+  const active = await count(page, 'active');
+  await tab(page, 'Lista');
+  await page.getByRole('button', { name: '＋ Plakat w tym miejscu' }).click();
+  await expect(page.getByText(/Brak zgody na lokalizację/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Zapisz punkt i wizytę' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Wskaż na mapie' }).click();
+  await page.getByRole('button', { name: 'Użyj tego miejsca' }).click();
+  await expect(page.getByTestId('quick-position')).toContainText('wskazane na mapie');
+  await page.getByLabel('Nazwa (opcjonalnie)').fill('Słup przy kościele');
+  await page.getByRole('button', { name: /Zapisz punkt i wizytę|Mimo to dodaj nowy punkt/ }).click();
+  expect(await count(page, 'active')).toBe(active + 1);
+});
+
+test('nowe: usuwanie do kosza, przywracanie, zaznaczanie wielu', async ({ page }) => {
+  await enterDemo(page);
+  const active = await count(page, 'active');
+  await openFromList(page, NAME1);
+  await page.getByRole('button', { name: 'Usuń', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  expect(await count(page, 'active')).toBe(active - 1);
+
+  await tab(page, 'Lista');
+  await page.getByRole('button', { name: 'Zaznacz wiele' }).click();
+  await page.getByLabel('Szukaj').fill('demonstracyjny 1');
+  await page.getByRole('button', { name: /Zaznacz wszystkie widoczne/ }).click();
+  const n = await page.locator('.point-list li').count();
+  expect(n).toBeGreaterThan(1);
+  await page.getByRole('button', { name: 'Usuń do kosza' }).click();
+  await expect(page.locator('.point-list li')).toHaveCount(0);
+  expect(await count(page, 'active')).toBe(active - 1 - n);
+
+  await tab(page, 'Lista');
+  await page.getByLabel('Pokaż').selectOption('trash');
+  await page.getByLabel('Szukaj').fill('');
+  await expect(page.locator('.point-list li')).toHaveCount(n + 1);
+  await page.getByRole('button', { name: 'Zaznacz wiele' }).click();
+  await page.getByRole('button', { name: /Zaznacz wszystkie widoczne/ }).click();
+  await page.getByRole('button', { name: 'Przywróć z kosza' }).click();
+  await expect(page.locator('.point-list li')).toHaveCount(0);
+  expect(await count(page, 'active')).toBe(active);
+});
+
+test('nowe: masowa zmiana rejonu i filtr rodzaju', async ({ page }) => {
+  page.removeAllListeners('dialog');
+  autoDialogs(page, 'Gmina Zielonki');
+  await enterDemo(page);
+  await tab(page, 'Lista');
+  await page.getByRole('button', { name: 'Zaznacz wiele' }).click();
+  await page.getByLabel('Rodzaj miejsca').selectOption('notice_board');
+  await page.getByRole('button', { name: /Zaznacz wszystkie widoczne \(3\)/ }).click();
+  await page.getByRole('button', { name: 'Ustaw rejon' }).click();
+  await page.getByRole('button', { name: 'Zakończ zaznaczanie' }).click();
+  await page.getByLabel('Rodzaj miejsca').selectOption('');
+  await page.getByLabel('Rejon', { exact: true }).selectOption('Gmina Zielonki');
+  await expect(page.locator('.point-list li')).toHaveCount(3);
+});
+
+test('nowe: eksport do Google Moje Mapy tylko z powieszonymi', async ({ page }) => {
+  await enterDemo(page);
+  await tab(page, 'Ustawienia');
+  const box = page.getByTestId('mymaps');
+  await expect(page.getByTestId('mymaps-save')).toHaveText('Zapisz plik dla Moich Map (1)');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('mymaps-save').click()]);
+  const fs = await import('node:fs/promises');
+  const text = await fs.readFile(await dl.path(), 'utf8');
+  const lines = text.trim().split('\r\n');
+  expect(lines[0]).toBe('Nazwa,Latitude,Longitude,Status,Rodzaj,Miejscowość,Adres,Rejon,Plakaty,Ostatnia wizyta');
+  expect(lines).toHaveLength(2);
+  expect(lines[1]).toContain('Plakat powieszony');
+  expect(text).not.toContain('Dane demonstracyjne.'); // notatki domyślnie wyłączone
+  await box.getByRole('button', { name: /Wrócić/ }).click();
+  await expect(page.getByTestId('mymaps-save')).toHaveText('Zapisz plik dla Moich Map (2)');
+});
+
+test('nowe: wyszukiwanie wielu rodzajów i ograniczenie promienia', async ({ page, context }) => {
+  let body = '';
+  await context.route(/overpass|ovp\.dresel/, (r) => {
+    body = decodeURIComponent((r.request().postData() ?? '').replace(/\+/g, ' '));
+    return r.fulfill({ json: { elements: [
+      { type: 'node', id: 1, lat: 50.1, lon: 19.9, tags: { advertising: 'column' } },
+      { type: 'way', id: 2, center: { lat: 50.2, lon: 19.8 }, tags: { amenity: 'community_centre', name: 'Świetlica Wiejska' } },
+    ] } });
+  });
+  await enterDemo(page);
+  await tab(page, 'Znajdź');
+  await page.getByLabel('Przystanki').check();
+  await expect(page.getByText(/promień musi wynosić 1–5 km/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Wyszukaj', exact: true })).toBeDisabled();
+  await page.getByLabel('Promień w kilometrach').fill('4');
+  await page.getByRole('button', { name: 'Wyszukaj', exact: true }).click();
+  await expect(page.getByText('Świetlica Wiejska')).toBeVisible();
+  await expect(page.getByText('Słup ogłoszeniowy bez nazwy w OSM (node/1)')).toBeVisible();
+  expect(body).toContain('highway"="bus_stop"');
+  expect(body).toContain('advertising');
+  await page.getByRole('button', { name: /Dodaj wszystkie nowe \(2\)/ }).click();
+  await openFromList(page, /Świetlica Wiejska/);
+  await expect(page.locator('.details')).toContainText('Świetlica / urząd');
 });

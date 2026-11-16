@@ -11,13 +11,14 @@ export interface Counters {
   posted: number;
   return: number;
   impossible: number;
-  /** Suma plakatów z nieanulowanych wizyt, także w punktach zarchiwizowanych. */
+  /** Suma plakatów z nieanulowanych wizyt, także w punktach zarchiwizowanych (bez punktów w koszu). */
   postersTotal: number;
 }
 
 export function computeCounters(points: Point[], visits: Visit[], statuses: Map<string, PointStatus>): Counters {
-  const live = visits.filter((v) => !v.cancelledAt);
-  const activePoints = points.filter((p) => !p.archivedAt);
+  const deleted = new Set(points.filter((p) => p.deletedAt).map((p) => p.id));
+  const live = visits.filter((v) => !v.cancelledAt && !deleted.has(v.pointId));
+  const activePoints = points.filter((p) => !p.archivedAt && !p.deletedAt);
   const c: Counters = { active: activePoints.length, uniqueVisited: 0, todo: 0, posted: 0, return: 0, impossible: 0, postersTotal: 0 };
   for (const p of activePoints) c[statuses.get(p.id) ?? 'todo']++;
   const activeIds = new Set(activePoints.map((p) => p.id));
@@ -32,7 +33,7 @@ export interface RegionRow extends Counters { region: string }
 
 export function countersByRegion(points: Point[], visits: Visit[], statuses: Map<string, PointStatus>): RegionRow[] {
   const groups = new Map<string, Point[]>();
-  for (const p of points) {
+  for (const p of points.filter((x) => !x.deletedAt)) {
     const key = p.region || NO_REGION;
     groups.set(key, [...(groups.get(key) ?? []), p]);
   }
@@ -61,7 +62,7 @@ const matchesRegion = (p: Point | undefined, region: string | null) =>
 export function buildReport(points: Point[], visits: Visit[], statuses: Map<string, PointStatus>, f: ReportFilter): ReportResult {
   const byId = new Map(points.map((p) => [p.id, p]));
   const rows = visits
-    .filter((v) => !v.cancelledAt)
+    .filter((v) => !v.cancelledAt && !byId.get(v.pointId)?.deletedAt)
     .filter((v) => {
       const day = warsawDay(v.visitedAt);
       return (!f.from || day >= f.from) && (!f.to || day <= f.to) && matchesRegion(byId.get(v.pointId), f.region);
@@ -73,7 +74,7 @@ export function buildReport(points: Point[], visits: Visit[], statuses: Map<stri
     uniquePlaces: new Set(rows.map((r) => r.visit.pointId)).size,
     posters: rows.reduce((s, r) => s + r.visit.posterCount, 0),
     toReturn: points
-      .filter((p) => !p.archivedAt && statuses.get(p.id) === 'return' && matchesRegion(p, f.region))
+      .filter((p) => !p.archivedAt && !p.deletedAt && statuses.get(p.id) === 'return' && matchesRegion(p, f.region))
       .sort((a, b) => a.name.localeCompare(b.name, 'pl')),
   };
 }
